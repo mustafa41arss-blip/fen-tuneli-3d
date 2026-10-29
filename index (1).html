@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Fen Tüneli 3D</title>
+<style>
+*{box-sizing:border-box;margin:0;user-select:none;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#02030a;color:#fff;font-family:system-ui,"Segoe UI",Arial,sans-serif}
+canvas{position:fixed;inset:0;z-index:0}
+.hide{display:none!important}
+.ov{position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:20px;background:radial-gradient(#0b1030cc,#02030af2)}
+#end{background:#02030a99}
+h1{font-size:clamp(34px,9vw,80px);letter-spacing:3px;background:linear-gradient(90deg,#00e5ff,#ff3df2,#ffd60a);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px #00e5ff88)}
+.g{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+button{font:inherit;color:#fff;cursor:pointer;border:2px solid #00e5ff;background:#00e5ff18;border-radius:14px;padding:14px 22px;font-weight:800;font-size:18px;box-shadow:0 0 16px #00e5ff66;transition:.15s}
+button:hover,button.on{background:#00e5ffcc;color:#012;transform:scale(1.07)}
+button:disabled{opacity:.35;pointer-events:none}
+#go{border-color:#ff3df2;box-shadow:0 0 24px #ff3df299;font-size:22px;padding:16px 48px}
+#go:hover{background:#ff3df2;color:#fff}
+#un{max-width:660px;font-size:13px;line-height:1.9;min-height:56px}
+#un b{display:inline-block;margin:2px;padding:1px 10px;border:1px solid #fff5;border-radius:20px;font-weight:500}
+#hud{position:fixed;top:0;left:0;right:0;z-index:3;padding:10px 12px;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none}
+#bar{width:min(640px,100%);display:flex;justify-content:space-between;font-weight:800;text-shadow:0 0 8px #000}
+#pg{width:min(640px,100%);height:6px;background:#fff2;border-radius:6px;overflow:hidden}
+#pg i{display:block;height:100%;width:0;background:linear-gradient(90deg,#00e5ff,#ff3df2);transition:width .5s}
+#un2{font-size:12px;color:#00e5ff;letter-spacing:2px;text-shadow:0 0 8px #000}
+#q{width:min(640px,100%);background:#050a28dd;border:2px solid #00e5ff;border-radius:16px;padding:14px 18px;font-size:clamp(16px,3.6vw,24px);font-weight:700;text-align:center;box-shadow:0 0 26px #00e5ff66}
+#ch{position:fixed;bottom:12px;left:0;right:0;z-index:3;display:flex;gap:10px;justify-content:center;padding:0 10px}
+#ch button{flex:1;min-width:0;max-width:220px;padding:12px 6px;font-size:clamp(13px,3.4vw,18px);line-height:1.2;background:#050a28dd;border-color:var(--c);box-shadow:0 0 14px var(--c)}
+#ch button.on{background:var(--c);color:#000}
+#t{position:fixed;top:46%;left:0;right:0;z-index:4;text-align:center;padding:0 12px;font-size:clamp(22px,5.5vw,48px);font-weight:900;pointer-events:none;text-shadow:0 0 20px currentColor,0 0 4px #000;opacity:0;transition:opacity .25s}
+#fx{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0}
+</style></head><body>
+<div id="fx"></div>
+<div id="hud" class="hide"><div id="bar"></div><div id="pg"><i></i></div><div id="un2"></div><div id="q"></div></div>
+<div id="ch" class="hide"><button id="b0"></button><button id="b1"></button><button id="b2"></button></div>
+<div id="t"></div>
+<div class="ov" id="menu">
+<h1>FEN TÜNELİ</h1>
+<p style="font-size:18px">Tünelin çıkışına koş. Soruyu oku, doğru cevabın kapısından geç!</p>
+<div class="g" id="gr"></div>
+<div id="un">Önce sınıfını seç.</div>
+<button id="go" disabled>BAŞLA</button>
+<p style="font-size:12px;opacity:.6">Ok tuşları / A-D, ekranda kaydırma veya A-B-C butonlarına dokunma ile şerit değiştir.</p>
+</div>
+<div class="ov hide" id="end"><h1 id="et"></h1><p id="es" style="font-size:22px"></p><div class="g"><button id="again">TEKRAR OYNA</button><button id="back">SINIF SEÇ</button></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Soru formatı: "Soru|A|B|C|doğruSeçenekNo(0-2)". Seçenekler oyunda otomatik karıştırılır. Yeni soru eklemek için ünite satırına bir metin daha ekle.
+const Q={
+5:[["Güneş, Dünya ve Ay","Güneş’in en dış katmanı hangisidir?|Çekirdek|Korona|Işık küre|1","Ay’ın tamamen aydınlık görünen evresi hangisidir?|Yeni Ay|Dolunay|İlk Dördün|1"],
+["Canlılar Dünyası","Hangisi tek hücreli bir canlıdır?|Amip|Kedi|Ayçiçeği|0","Hangisi omurgasız bir canlıdır?|Balık|Kelebek|Kurbağa|1"],
+["Kuvvet ve Sürtünme","Kuvvet hangi aletle ölçülür?|Barometre|Dinamometre|Termometre|1","Sürtünme kuvveti harekete göre hangi yöndedir?|Zıt yönde|Aynı yönde|Dik yönde|0"],
+["Madde ve Değişim","Suyun gaz hâline geçmesine ne denir?|Erime|Donma|Buharlaşma|2","Hangisi kimyasal değişimdir?|Buzun erimesi|Demirin paslanması|Suyun donması|1"],
+["Işığın Yayılması","Işığı hiç geçirmeyen madde hangisidir?|Tahta|Cam|Şeffaf plastik|0","Hangisi ışık kaynağıdır?|Ay|Ayna|Güneş|2"],
+["İnsan ve Çevre","Atık piller nereye atılmalıdır?|Çöpe|Pil kutusuna|Denize|1","Hangisi çevreyi kirletir?|Fabrika dumanı|Ağaç dikmek|Geri dönüşüm|0"],
+["Elektrik Devre Elemanları","Anahtar açıkken devreden akım geçer mi?|Geçer|Geçmez|Pil biter|1","Pil devrede ne işe yarar?|Enerji sağlar|Akımı keser|Işık yayar|0"]],
+6:[["Güneş Sistemi ve Tutulmalar","En büyük gezegen hangisidir?|Satürn|Jüpiter|Dünya|1","Ay, Dünya ile Güneş arasına girerse ne olur?|Ay tutulması|Güneş tutulması|Mevsim oluşur|1"],
+["Vücudumuzdaki Sistemler","Besinlerin parçalanması hangi sistemde olur?|Sindirim sistemi|Dolaşım sistemi|Solunum sistemi|0","Kanı vücuda pompalayan organ hangisidir?|Akciğer|Kalp|Mide|1"],
+["Kuvvet ve Hareket","Yol 100 m, zaman 10 s ise sürat kaç m/s’dir?|5|10|1000|1","Sürat nasıl hesaplanır?|Yol / Zaman|Yol x Zaman|Zaman / Yol|0"],
+["Madde ve Isı","Isı, cisimler arasında nasıl akar?|Soğuktan sıcağa|Sıcaktan soğuğa|Akmaz|1","Saf maddenin erimesi sırasında sıcaklık nasıl değişir?|Sabit kalır|Artar|Azalır|0"],
+["Ses ve Özellikleri","Ses hangi ortamda yayılamaz?|Su|Hava|Boşluk|2","Sesin şiddeti hangi birimle ölçülür?|Hertz|Desibel|Newton|1"],
+["Elektriğin İletimi","Hangisi yalıtkandır?|Demir|Cam|Alüminyum|1","Hangisi iletkendir?|Plastik|Bakır|Tahta|1"]],
+7:[["Güneş Sistemi ve Ötesi","Işık yılı neyin birimidir?|Zaman|Uzaklık|Hız|1","Samanyolu nedir?|Bir galaksi|Bir gezegen|Bir yıldız|0"],
+["Hücre ve Bölünmeler","Hücrenin yönetim merkezi hangisidir?|Çekirdek|Ribozom|Koful|0","Eşey hücreleri hangi bölünmeyle oluşur?|Mitoz|Mayoz|Amitoz|1"],
+["Kuvvet ve Enerji","Hareketli cismin sahip olduğu enerji hangisidir?|Kinetik enerji|Potansiyel enerji|Kimyasal enerji|0","Yüksekteki cismin sahip olduğu enerji hangisidir?|Kinetik enerji|Çekim potansiyel enerjisi|Ses enerjisi|1"],
+["Saf Madde ve Karışımlar","Hangisi saf maddedir?|Tuzlu su|Hava|Altın|2","Hangisi homojen karışımdır?|Çamurlu su|Tuzlu su|Zeytinyağı-su|1"],
+["Işığın Madde ile Etkileşimi","Düz aynada görüntü nasıldır?|Ters ve küçük|Sanal ve eşit boy|Gerçek ve büyük|1","Işığın ortam değiştirirken yön değiştirmesine ne denir?|Yansıma|Kırılma|Soğurulma|1"],
+["Üreme, Büyüme ve Gelişme","Hangisi eşeysiz üreme türüdür?|Tomurcuklanma|Döllenme|Mayoz|0","Döllenme sonucu oluşan ilk hücre hangisidir?|Sperm|Yumurta|Zigot|2"],
+["Elektrik Devreleri","Seri bağlı devrede akım nasıldır?|Her yerde aynı|Dallanır|Sıfır|0","Ampermetre devreye nasıl bağlanır?|Paralel|Seri|Hiç bağlanmaz|1"]],
+8:[["Mevsimler ve İklim","Mevsimler Dünya’nın hangi özelliğiyle oluşur?|Eksen eğikliği ve Güneş etrafında dolanma|Sadece kendi etrafında dönme|Ay’ın dolanması|0","Uzun yıllık hava olayları ortalamasına ne denir?|Hava durumu|İklim|Rüzgâr|1"],
+["DNA ve Genetik Kod","DNA’nın yapı taşı nedir?|Amino asit|Glikoz|Nükleotit|2","Genetik yapıdaki ani değişikliğe ne denir?|Mutasyon|Adaptasyon|Modifikasyon|0"],
+["Basınç","Basınç nasıl hesaplanır?|Alan / Kuvvet|Kuvvet / Yüzey alanı|Kuvvet x Alan|1","Yükseğe çıkıldıkça açık hava basıncı nasıl değişir?|Artar|Azalır|Değişmez|1"],
+["Madde ve Endüstri","Asitler mavi turnusol kâğıdını ne yapar?|Kırmızıya çevirir|Etkilemez|Beyazlatır|0","Kimyasal tepkimede toplam kütle nasıl değişir?|Artar|Azalır|Korunur|2"],
+["Basit Makineler","Hangisi basit makine değildir?|Kaldıraç|Makara|Pil|2","Basit makineler ne sağlar?|İş kazancı|Kuvvet veya yön kazancı|Enerji üretimi|1"],
+["Enerji Dönüşümleri ve Çevre","Hangisi yenilenebilir enerji kaynağıdır?|Kömür|Doğal gaz|Rüzgâr|2","Bitki fotosentezde hangi gazı alır?|Oksijen|Karbondioksit|Azot|1"],
+["Elektrik Yükleri ve Enerjisi","Aynı yüklü cisimler birbirini nasıl etkiler?|İter|Çeker|Etkilemez|0","Paratonerin görevi nedir?|Yağmur yağdırmak|Elektrik üretmek|Yıldırımı toprağa iletmek|2"]]};
+
+const $=i=>document.getElementById(i),COL=['#ff3df2','#ffd60a','#00e5ff'],LX=[-3.4,0,3.4];
+let G=0,qs=[],qi=0,sc=0,ok=0,lv=3,lane=1,st='menu',gate=null,wait=0,T=0,sh=0,ended=0,v=6,tm;
+const show=(i,b)=>$(i).classList.toggle('hide',!b);
+
+// ---- 3D sahne ----
+const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(R.domElement);
+const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(75,1,.1,320),K=new THREE.Clock();
+S.background=new THREE.Color(0x02030a);S.fog=new THREE.FogExp2(0x02030a,.017);
+function rs(){R.setSize(innerWidth,innerHeight);C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix()}
+addEventListener('resize',rs);rs();
+
+const tun=new THREE.Mesh(new THREE.CylinderGeometry(7.5,7.5,280,18,56,true).rotateX(Math.PI/2),new THREE.MeshBasicMaterial({color:0x2a3cff,wireframe:true,side:THREE.BackSide,transparent:true,opacity:.4}));
+tun.position.z=-120;S.add(tun);
+
+const rg=new THREE.TorusGeometry(7.2,.14,6,48),rings=[];
+for(let i=0;i<34;i++){const m=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color:0xffffff}));m.position.z=-i*7;S.add(m);rings.push(m)}
+
+const NP=500,pp=new Float32Array(NP*3);
+function rp(i,z){const a=Math.random()*6.28,r=1.5+Math.random()*5.2;pp[i*3]=Math.cos(a)*r;pp[i*3+1]=Math.sin(a)*r;pp[i*3+2]=z!==undefined?z:-Math.random()*220}
+for(let i=0;i<NP;i++)rp(i);
+const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
+S.add(new THREE.Points(pg,new THREE.PointsMaterial({size:.22,color:0x99ffff,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false})));
+
+const ex=new THREE.Group();
+ex.add(new THREE.Mesh(new THREE.CircleGeometry(7,40),new THREE.MeshBasicMaterial({color:0xffffff,fog:false})));
+const hl=new THREE.Mesh(new THREE.CircleGeometry(13,40),new THREE.MeshBasicMaterial({color:0x99ffff,fog:false,transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false}));
+hl.position.z=-.5;ex.add(hl);ex.position.z=-235;S.add(ex);
+
+const P=new THREE.Group(),bd=new THREE.Mesh(new THREE.ConeGeometry(.55,2,4),new THREE.MeshBasicMaterial({color:0x00e5ff}));
+bd.rotation.x=-Math.PI/2;P.add(bd);
+const wf=new THREE.Mesh(new THREE.ConeGeometry(.8,2.2,4),new THREE.MeshBasicMaterial({color:0xff3df2,wireframe:true}));
+wf.rotation.x=-Math.PI/2;P.add(wf);
+const fl=new THREE.Mesh(new THREE.ConeGeometry(.3,2.4,8),new THREE.MeshBasicMaterial({color:0xffaa00,transparent:true,opacity:.8,blending:THREE.AdditiveBlending}));
+fl.rotation.x=Math.PI/2;fl.position.z=1.9;P.add(fl);P.position.set(0,-2.6,-5);S.add(P);
+
+const TX=[0,1,2].map(i=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');
+x.fillStyle=COL[i];x.fillRect(0,0,128,128);x.fillStyle='#000a';x.fillRect(10,10,108,108);
+x.fillStyle='#fff';x.font='bold 90px system-ui';x.textAlign='center';x.textBaseline='middle';x.fillText('ABC'[i],64,70);return new THREE.CanvasTexture(c)});
+function mkGate(){const g=new THREE.Group();
+for(let i=0;i<3;i++){const b=new THREE.BoxGeometry(3.2,6,.4),m=new THREE.Mesh(b,new THREE.MeshBasicMaterial({map:TX[i]}));
+m.position.set(LX[i],-.2,0);m.add(new THREE.LineSegments(new THREE.EdgesGeometry(b),new THREE.LineBasicMaterial({color:COL[i]})));g.add(m)}
+g.position.z=-130;S.add(g);g.done=0;return g}
+
+// ---- Oyun mantığı ----
+function mk(r,u){const[t,a,b,c,k]=r.split('|'),o=[a,b,c].map((x,i)=>[x,i==k]).sort(()=>Math.random()-.5);return{u,t,o:o.map(x=>x[0]),c:o.findIndex(x=>x[1])}}
+function hud(){const l=Math.max(lv,0);$('bar').innerHTML='<span>'+'♥'.repeat(l)+'♡'.repeat(3-l)+'</span><span>SORU '+Math.min(qi+1,qs.length)+'/'+qs.length+'</span><span>PUAN '+sc+'</span>';document.querySelector('#pg i').style.width=qi/qs.length*100+'%'}
+function fx(c){const f=$('fx');f.style.transition='none';f.style.background=c;f.style.opacity=.3;setTimeout(()=>{f.style.transition='opacity .7s';f.style.opacity=0},40)}
+function say(s,c){const t=$('t');t.textContent=s;t.style.color=c;t.style.opacity=1;fx(c);clearTimeout(tm);tm=setTimeout(()=>t.style.opacity=0,1600)}
+function setLane(l){lane=Math.max(0,Math.min(2,l));[0,1,2].forEach(i=>$('b'+i).classList.toggle('on',i==lane))}
+function clr(){if(gate){S.remove(gate);gate=null}}
+function ask(){const q=qs[qi];$('q').textContent=q.t;$('un2').textContent=q.u.toLocaleUpperCase('tr');[0,1,2].forEach(i=>$('b'+i).textContent='ABC'[i]+') '+q.o[i]);gate=mkGate();hud()}
+function judge(){const q=qs[qi];
+if(lane==q.c){sc+=100;ok++;say('✔ DOĞRU!','#32ff7e')}
+else{lv--;sh=.7;say('✘ Doğru cevap: '+'ABC'[q.c]+') '+q.o[q.c],'#ff3355')}
+qi++;hud();if(lv<1){st='over';setTimeout(()=>fin(0),1800)}}
+function fin(w){st='over';ended=1;clr();show('hud',0);show('ch',0);
+$('et').textContent=w?'ÇIKIŞA ULAŞTIN! 🌟':'TÜNELDE KALDIN 💥';
+$('es').textContent='Puan: '+sc+'  •  Doğru: '+ok+'/'+qs.length;show('end',1)}
+function start(){clr();
+qs=Q[G].flatMap(u=>u.slice(1).map(r=>mk(r,u[0]))).sort(()=>Math.random()-.5);
+qi=sc=ok=0;lv=3;ended=0;wait=1.8;ex.position.z=-235;setLane(1);
+$('q').textContent='Hazır ol! İlk soru geliyor…';$('un2').textContent=G+'. SINIF FEN BİLİMLERİ';hud();
+show('menu',0);show('end',0);show('hud',1);show('ch',1);st='run'}
+
+[5,6,7,8].forEach(g=>{const b=document.createElement('button');b.textContent=g+'. SINIF';
+b.onclick=()=>{G=g;[...$('gr').children].forEach(x=>x.classList.toggle('on',x==b));
+$('un').innerHTML='<div style="margin-bottom:6px;color:#00e5ff">'+g+'. sınıf üniteleri</div>'+Q[g].map(u=>'<b>'+u[0]+'</b>').join('');$('go').disabled=false};
+$('gr').append(b)});
+[0,1,2].forEach(i=>{const b=$('b'+i);b.style.setProperty('--c',COL[i]);b.onclick=()=>setLane(i)});
+$('go').onclick=start;$('again').onclick=start;
+$('back').onclick=()=>{clr();ex.position.z=-235;st='menu';show('end',0);show('menu',1)};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k=='arrowleft'||k=='a')setLane(lane-1);if(k=='arrowright'||k=='d')setLane(lane+1)});
+let tx=0;addEventListener('touchstart',e=>tx=e.touches[0].clientX,{passive:true});
+addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-tx;if(Math.abs(d)>40)setLane(lane+(d>0?1:-1))},{passive:true});
+
+(function L(){requestAnimationFrame(L);const dt=Math.min(K.getDelta(),.05);T+=dt;
+v=st=='run'?15+qi*.4:st=='win'?70:6;
+rings.forEach(m=>{m.position.z+=v*dt;if(m.position.z>8)m.position.z-=238;m.material.color.setHSL((T*.08-m.position.z*.006+1)%1,1,.55)});
+for(let i=0;i<NP;i++){pp[i*3+2]+=v*dt*1.3;if(pp[i*3+2]>6)rp(i,-220)}pg.attributes.position.needsUpdate=true;
+tun.rotation.z+=dt*.12;hl.scale.setScalar(1+Math.sin(T*3)*.08);
+
+if(st=='run'){
+ if(!gate){wait-=dt;if(wait<=0){if(qi>=qs.length)st='win';else ask()}}
+ else{gate.position.z+=v*dt;
+  if(!gate.done&&gate.position.z>-4){gate.done=1;judge()}
+  if(gate&&gate.position.z>8){clr();wait=1.3}}
+ ex.position.z+=(-235+qi/qs.length*165-ex.position.z)*Math.min(1,dt*2)}
+if(st=='win'){ex.position.z+=60*dt;if(ex.position.z>-8&&!ended)fin(1)}
+
+P.position.x+=(LX[lane]-P.position.x)*Math.min(1,dt*9);
+P.rotation.z=(P.position.x-LX[lane])*.3;P.position.y=-2.6+Math.sin(T*3)*.1;fl.scale.y=1+Math.random()*.6;
+sh=Math.max(0,sh-dt);const s=sh*(Math.random()-.5)*.8;
+C.position.set(P.position.x*.5+s,-.2+s*.5,1.5);C.lookAt(P.position.x*.3,-1.8,-30);
+C.fov=75+(v-6)*.35;C.updateProjectionMatrix();
+R.render(S,C)})();
+</script></body></html>
